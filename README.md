@@ -2,7 +2,7 @@
 
 Takes RA DEC LAT LONG TIME in radien
 
-to give processed data FOR ALT AZ J2000 
+to give processed data for ALT AZ J2000 
 
 FOR RA and DEC it will calculate the ALT and AZ using a predefine hour angle, the equation for hour angle is written but not implemented. 
 
