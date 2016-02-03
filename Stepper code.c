@@ -60,9 +60,9 @@ void twoStep(float lALT, float LAZ);
 int main(){
     while(1){
 
-        twoStep(0.1,0.08);
+        twoStep(0.1,0.0237);
         printf("Task completed!\n\n\n\n");
-        sleep(1);
+        sleep(60);
 /*        
     output_b(HalfStep[yStep&0x7]<<4|HalfStep[xStep&0x7]);   
     delay_ms(d);
@@ -86,32 +86,35 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
         // Now we need to find the step requiered to get there
     int yToDo = yStepsTobe - yStep;
     int xToDo = xStepsTobe - xStep;
-    float difs = yToDo / xToDo;
+    float difs = (float)yToDo / (float)xToDo;
     //printf("Mis Vals;                         dif:%f yToDo:%d xToDo:%d \n",difs,yToDo,xToDo);    
    
     int yDir = 1;   if (yToDo < 0)   yDir = -1;              //Assigning a value to know what direction to move the motors
-    int xDir = 1;   if (xToDo < 0)    xDir = -1;              //Using the nested if statment. 
+    int xDir = 1;   if (xToDo < 0)   xDir = -1;              //Using the nested if statment. 
 
     
         // Now we have if statments for the cases where one number is higher then the other and where they are equal
     if (abs(yToDo)>abs(xToDo)){                               // IN this case Y is higher
         
-        float dif = yToDo/xToDo;
+        float dif = (float)yToDo / (float)xToDo;
         //printf("The fuking diffrence! %4f\n",dif);
         int intdif  = (int)dif;
         float decpart = dif - intdif;
 
         int usDelay = decpart * 1000;
-        printf("We made it this far!\n");
+        printf("Alt > AZ for loop\n");
+        
         printf("Mis Vals;                         decpart:%f usDelay:%d dif:%f yDir:%d xDir%d yToDo:%d xToDo:%d \n",decpart,usDelay,dif,yDir,xDir,yToDo,xToDo);    
 
-        for (int *z = &xToDo; *z > 0; *z--){                             // Here we itterate for the value of x as it lower 
+        for ( ; xToDo > 0; xToDo--){                             // Here we itterate for the value of x as it lower 
             //delay_us(1000-usDelay);
+        
+        printf("Main For loop\n");
         printf("Vals;    xStep:%d           yStep%d\n", xStep, yStep);
         printf("Vals;    xLeft:%d           yLeft%d\n", xToDo, yToDo);
         
-        printf("Mis Vals;                         decpart:%f usDelay:%d dif:%f yDir:%d xDir%d yToDo:%d xToDo:%d \n",decpart,usDelay,dif,yDir,xDir,yToDo,xToDo);    
-            printf("Main For loop\n");
+        //printf("Mis Vals;                         decpart:%f usDelay:%d dif:%f yDir:%d xDir%d yToDo:%d xToDo:%d \n",decpart,usDelay,dif,yDir,xDir,yToDo,xToDo);    
+        
 /*            printf("UsDelay is %d\n", usDelay);
             printf("xToDo is %d\n", xToDo);*/
             for (int i = (int)yToDo/xToDo; i > 0; i--){                  // Inside the x itteration we have the more frequent y itteration
