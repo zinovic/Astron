@@ -34,6 +34,8 @@ int d = 1;
 
 float pi = 3.141592654;
 
+double radStep = 0.00025566346464760687161968126491532;
+
 unsigned int HalfStep[8]={0x1,0x3,0x2,0x6,0x4,0xC,0x8,0x9};
 
     // Binary and hex values for the 8 half step positions for both motors
@@ -84,11 +86,11 @@ int main(){
     
 }
    
-void twoStep(float lALT, float lAZ){                        // ALT == y    AZ == x  in Rad and what the new cordinates need to be
+void twoStep(float lALT, float lAZ){                                    // ALT == y    AZ == x  in Rad and what the new cordinates need to be
         // We need to convert the Rad value to step equivilent
-    float yStepsTobe = (float)lALT/(float)((float)(pi/2)/6144);      // ALT we have 0 - pi/2 rad at 6144step  360/(5.625/64) = 4096 steps per 2pi; Gear ratio of 10:60 -> (60/4)/10 = 1.5 turns for 2/pi rad 4096*1.5 = 6144 steps for 90 deg or 2/pirad 
-    float xStepsTobe = (float)lAZ/(float)((float)(2*pi)/(6144*4));   // AZ  we have 0 - 2pi rad at (ALTsteps*4)       // at this step speed one revolution should take 24576ms or 24.6 seconds this means the longest if shoul take to a point the in the sky is 12.3 seconds
-
+    float yStepsTobe = (float)lALT/(double)radStep;         // ALT we have 0 - pi/2 rad at 6144step  360/(5.625/64) = 4096 steps per 2pi; Gear ratio of 10:60 -> (60/4)/10 = 1.5 turns for 2/pi rad 4096*1.5 = 6144 steps for 90 deg or 2/pirad 
+    float xStepsTobe = (float)lAZ/(double)radStep;      // AZ  we have 0 - 2pi rad at (ALTsteps*4)       // at this step speed one revolution should take 24576ms or 24.6 seconds this means the longest if shoul take to a point the in the sky is 12.3 seconds
+                                                                        // lAZ/((2*pi)/(6144*4)) = 0.00025566346464760687161968126491532
     printf("Inout;        AZ:%f      ALT:%f\n", lAZ, lALT);
     printf("to be;        yStepsTobe:%f      xStepsTobe:%f\n", yStepsTobe, xStepsTobe);
 
@@ -197,7 +199,7 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
             //printf("while loop hToDo is %d\n", hToDo);
             //printf("while loop lToDo is %d\n", lToDo);
             
-            for ( int i = (int)(hToDo/(lToDo)); i > 0; i--){                  // Inside the x itteration we have the more frequent y itteration
+            for ( unsigned int i = (unsigned int)((hToDo/(lToDo))); i > 0; i--){                  // Inside the x itteration we have the more frequent y itteration
                 //printf("xToDo is %d\n", xToDo);
 
                     //printf("Fast loop -> ");
@@ -220,7 +222,7 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
                 
             *lStep+=lDir;
             lToDo--;
-            *hStep+=hDir;
+            //*hStep+=hDir;
 
             delay_ms(d);
                 //printf("H Step: %d\n", *hStep);
@@ -232,9 +234,9 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
 
         // after action report
         printf("Inout;        AZ:%f      ALT:%f\n", lAZ, lALT);
-        printf("Output;       AZ:%f      ALT:%f\n", (float)xStep*((float)(2*pi)/24576), (float)yStep*((float)(pi/2)/6144));
-        //printf("Diffrence;    AZ:%f      ALT:%f\n", abs(lAZ-((float)xStep*((float)(2*pi)/24576))), abs(lALT-((float)yStep*((float)(pi/2)/6144))))lALT;
+        printf("Output;       AZ:%f      ALT:%f\n", (float)xStep*(double)radStep, (float)yStep*(double)radStep);
 
+        printf("diffrence;    AZ:%f      ALT:%f\n\n", (float)lAZ-(float)xStep*(double)radStep, (float)lALT-(float)yStep*(double)radStep);
 
         printf("Vals;    xStep:%d      xLeft%d\n", *lStep, lToDo);
         printf("Vals;    yStep:%d      yLeft%d\n", *hStep, hToDo);
