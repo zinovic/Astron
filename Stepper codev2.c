@@ -25,8 +25,8 @@ Common conversions for reference:
 
 #include <time.h>
 
-unsigned int xStep = 0;
-unsigned int yStep = 0;
+int xStep = 0;
+int yStep = 0;
 
 //_bif void output_b(int8 value);
 
@@ -46,7 +46,7 @@ unsigned int HalfStep[8]={0x1,0x3,0x2,0x6,0x4,0xC,0x8,0x9};
 
 // Pic functions
     void output_b (int foo){
-        printf("Stp: %x\n", foo);
+        //printf("Stp: %x\n", foo);
     }
 
     void delay_ms (int foo){
@@ -69,9 +69,10 @@ int main(){
         float rAZ  = (float)rand()/(float)RAND_MAX/6.28318;
 
 
-        twoStep(rALT,rAZ);                          // values i know work 1.351567,0.57234
+        twoStep(rALT,rAZ);                          // values i know work 1.351567,0.57234 // rALT,rAZ
+        
         printf("Task completed!\n\n\n\n");
-        sleep(2);
+        sleep(1);
 /*        
     output_b(HalfStep[yStep&0x7]<<4|HalfStep[xStep&0x7]);   
     delay_ms(d);
@@ -80,13 +81,18 @@ int main(){
     yStep ++;
     */
     }
+    
 }
    
 void twoStep(float lALT, float lAZ){                        // ALT == y    AZ == x  in Rad and what the new cordinates need to be
         // We need to convert the Rad value to step equivilent
     float yStepsTobe = (float)lALT/(float)((float)(pi/2)/6144);      // ALT we have 0 - pi/2 rad at 6144step  360/(5.625/64) = 4096 steps per 2pi; Gear ratio of 10:60 -> (60/4)/10 = 1.5 turns for 2/pi rad 4096*1.5 = 6144 steps for 90 deg or 2/pirad 
     float xStepsTobe = (float)lAZ/(float)((float)(2*pi)/(6144*4));   // AZ  we have 0 - 2pi rad at (ALTsteps*4)       // at this step speed one revolution should take 24576ms or 24.6 seconds this means the longest if shoul take to a point the in the sky is 12.3 seconds
-    
+
+    printf("Inout;        AZ:%f      ALT:%f\n", lAZ, lALT);
+    printf("to be;        yStepsTobe:%f      xStepsTobe:%f\n", yStepsTobe, xStepsTobe);
+
+    printf("yStep: %d xStep: %d\n", yStep, xStep );
     // Lets convert the input radien and the current psition form step values to find the diffrence. 
     // max stp num for Alt is: 6144             6144/(pi/2) = 15645.56 So Alt Has 1
     // max stp num for AZ  is: 6144*4 = 24576
@@ -95,13 +101,151 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
         // Now we need to find the step requiered to get there
     int yToDo = yStepsTobe - yStep;
     int xToDo = xStepsTobe - xStep;
-    float difs = (float)yToDo / (float)xToDo;
+
+    printf("Y to do: %d     X to do: %d\n", yToDo, xToDo);
+    //float difs = (float)yToDo / (float)xToDo;
     //printf("Mis Vals;                         dif:%f yToDo:%d xToDo:%d \n",difs,yToDo,xToDo);    
    
     int yDir = 1;   if (yToDo < 0)   yDir = -1;              //Assigning a value to know what direction to move the motors
     int xDir = 1;   if (xToDo < 0)   xDir = -1;              //Using the nested if statment. 
 
     
+        int hToDo;
+        int lToDo;
+
+        signed int *hStep;
+        signed int *lStep;
+
+        int hDir;
+        int lDir;
+
+        char hSft;
+        char lSft;
+
+
+    if (abs(yToDo)>abs(xToDo)){
+        //
+        hToDo = yToDo;
+        lToDo = xToDo;
+
+        hStep = &yStep;
+        lStep = &xStep;
+
+        hDir = yDir;
+        lDir = xDir;  
+
+        hSft = 0;
+        lSft = 4;
+
+        if (yToDo == 0){
+            yToDo += 1;             //This is to ensure we dont ge th stuck in a loop with no end, not the best compromise in terms of accurecy but i has to do 
+        } 
+
+        printf("Debug first if\n");
+    }
+    else if (abs(yToDo)<abs(xToDo)){
+        //
+        hToDo = abs(xToDo);
+        lToDo = abs(yToDo);
+
+        hStep = &xStep;
+        lStep = &yStep;
+
+        hDir = xDir;
+        lDir = yDir; 
+
+        
+        hSft = 4;
+        lSft = 0;
+
+        if (xToDo == 0){
+            xToDo += 10;             //Same reasons as
+        } 
+
+        printf("Debug second if\n");
+    }
+
+    else                             // intended for the cases where the x and y change values are the same so we run both at once
+        while (abs(yToDo) > 0){
+            output_b(HalfStep[yStep&0x7]<<4|HalfStep[xStep&0x7]);
+            delay_ms (d);
+            yToDo --;
+            xToDo --;
+            xStep ++;
+            yStep ++;
+        }
+
+/*    while (*lStep == 0 && abs(*hStep) > 0){
+        output_b(HalfStep[yStep&0x7]<<hSft);
+        *hStep+=hDir;
+            printf("One axis loop lToDo is %d\n", lToDo);
+            printf("One axis loop hToDo is %d\n", hToDo);
+
+    }
+*/
+    ///////////////////////// Main Stepper Code Loop ///////////////////////////
+    while (abs(hToDo)>abs(lToDo)){
+
+            printf("hToDo is %d\n", hToDo);
+            printf("lToDo is %d\n", lToDo);
+
+            int e = 0;
+            if (e > 20){ exit; }
+
+            printf("Error %d\n", e);
+
+        while ( abs(lToDo) > 0 ){
+            lToDo-=lDir;
+            
+            printf("while loop hToDo is %d\n", hToDo);
+            printf("while loop lToDo is %d\n", lToDo);
+            
+            for ( int i = (int)(abs(hToDo)/(abs(lToDo)+1)); i > 0; i--){                  // Inside the x itteration we have the more frequent y itteration
+                //printf("xToDo is %d\n", xToDo);
+
+                    //printf("Fast loop -> ");
+                delay_ms(d);
+                output_b(HalfStep[yStep&0x7]<<lSft);
+                *hStep+=hDir;
+                hToDo-=hDir;
+            }
+
+            // Debugging prints/*
+               // printf("hToDo is %d\n", hToDo);
+               // printf("lToDo is %d\n", lToDo);
+
+               // printf("Vals;    xStep:%d           yStep%d\n", xStep, yStep);
+               // printf("Vals;    xLeft:%d           yLeft%d\n", xToDo, yToDo);
+               // printf("Loop ");   
+               // printf("Slow loop -> ");
+
+            output_b(HalfStep[xStep&0x7]<<hSft | HalfStep[yStep&0x7]<<lSft);
+                //printf("L Step: %d\n", *lStep);
+            *lStep+=lDir;
+                //printf("H Step: %d\n", *hStep);
+            *hStep+=hDir;
+            delay_ms(d);
+        }
+
+        e++;
+        // printf("Done With this loop\n");
+    }
+
+        // after action report
+        printf("Inout;        AZ:%f      ALT:%f\n", lAZ, lALT);
+        printf("Output;       AZ:%f      ALT:%f\n", (float)xStep*((float)(2*pi)/24576), (float)yStep*((float)(pi/2)/6144));
+
+        printf("Vals;    xStep:%d      xLeft%d\n", *lStep, lToDo);
+        printf("Vals;    yStep:%d      yLeft%d\n", *hStep, hToDo);
+
+
+
+}
+
+    // We can use modulo to ajust the loop 
+
+    ////////////////////////////////////////////  OLD CODE  //////////////////////////////////////////////////////////
+/*B
         // Now we have if statments for the cases where one number is higher then the other and where they are equal
     if (abs(yToDo)>abs(xToDo)){                               // IN this case Y is higher
         
@@ -115,18 +259,22 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
         
         //printf("Mis Vals;                         decpart:%f usDelay:%d dif:%f yDir:%d xDir%d yToDo:%d xToDo:%d \n",decpart,usDelay,dif,yDir,xDir,yToDo,xToDo);    
 
+
+
+
+
         for ( ; xToDo > 0; xToDo--){                             // Here we itterate for the value of x as it lower 
             //delay_us(1000-usDelay);
         
         //printf("Main For loop\n");
         //printf("Vals;    xStep:%d           yStep%d\n", xStep, yStep);
         //printf("Vals;    xLeft:%d           yLeft%d\n", xToDo, yToDo);
-        
+
         //printf("Mis Vals;                         decpart:%f usDelay:%d dif:%f yDir:%d xDir%d yToDo:%d xToDo:%d \n",decpart,usDelay,dif,yDir,xDir,yToDo,xToDo);    
         
-/*            printf("UsDelay is %d\n", usDelay);
-            printf("xToDo is %d\n", xToDo);*/
-            for (int i = (int)yToDo/xToDo; i > 0; i--){                  // Inside the x itteration we have the more frequent y itteration
+            printf("UsDelay is %d\n", usDelay);
+            printf("xToDo is %d\n", xToDo);
+            for (int i = (int)(yToDo/xToDo); i > 0; i--){                  // Inside the x itteration we have the more frequent y itteration
                 printf("Fast loop -> ");
                 delay_ms(d);
                 output_b(HalfStep[yStep&0x7]<<4);
@@ -142,6 +290,8 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
         }
         printf("Done With this loop\n");
         exit;
+
+
 
         //WTF I dont understand any of this code
         // so maybe i do get it:
@@ -186,7 +336,7 @@ void twoStep(float lALT, float lAZ){                        // ALT == y    AZ ==
 
 
 
-
+*/
 
 
 /*
