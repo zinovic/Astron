@@ -44,6 +44,10 @@ float Azimuth (char lDEC, char lALT, char lLAT);
 float radfrom(float x);
 float degfrom(float x);
 
+float HourAngle (char lLST, char lRA);
+
+float LocalSdrTime (float lday, float lLNG, int lUT);
+
 float J2kfrom( int y, int m, int d, float t);
 float decimalday(int h, int m, int s);
 
@@ -85,10 +89,14 @@ int main ()//int argc, char *argv[])
   
   UTC = decimalday(hour,minute,second);
   J2k = J2kfrom(year,month,day,UTC);
+ 
+  LST = LocalSdrTime (J2k,LONG,UTC);
+  HA = HourAngle(LST,RA);
 
   printf("J2000: %f\n", J2k);
   printf("Decimal day: %f\n", UTC);
-  
+  printf("LST: %f\n",LST );
+
   DumpPrint();
 
   printf("Altitude in degrees: %f\n", degfrom(ALT));
@@ -122,7 +130,12 @@ float HourAngle (char lLST, char lRA){
   return lLST - lRA;
 }
 
-//float SidrielTime (char){}
+float LocalSdrTime ( float lday, float lLNG, int lUT ){
+  return 100.46 + 0.985647 * lday + lLNG + 15*lUT;
+}
+
+
+
 
 float J2kfrom( int y, int m, int d, float t){
   float JD = d-32075+1461*(y+4800+(m-14)/12)/4+367*(m-2-(m-14)/12*12)/12-3*((y+4900+(m-14)/12)/100)/4;

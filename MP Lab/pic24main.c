@@ -1,3 +1,14 @@
+/* 
+ * File:   pic24main.c
+ * Author: Nicholas
+ *
+ * Created on 06 February 2016, 13:09
+ */
+
+//#include <stdio.h>
+//#include <stdlib.h>
+
+
 // Notes
     // As C libraries use Radien for math equations they 
     // will be used for angles unless otherwise specified. 
@@ -13,21 +24,28 @@
     // #use delay(clock=8000000) 
     // #include <16f819.h>   
 
+#include <24FJ128GA202.h>
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+//#include <unistd.h>
 #include <time.h>
 
+//#fuses INTRC_IO,NOWDT,NOPROTECT,WDT 
+#use delay(clock=4000000) 
+#use rs232(baud=9600, XMIT=PIN_A2, RCV=PIN_A3, stream=PC, ERRORS)
+
+
 // Shared ints
-    float pi = 3.141592654;
+//    float pi = 3.141592654;
 
 // Start ints
     float RA = 0;   //4.370740779;
     float DEC = 0;  //0.636463406;
 
     float LAT = 0.916297857;
-    float LONG = -0.033452145;
+    float LNG = -0.033452145;
 
     float LST = 0;
     float HA = 0.949155775;
@@ -36,15 +54,15 @@
     float AZ = 0;
 
     int year = 2016;
-    int month = 2;
+    int months = 2;
     int day = 10;
 
     int hour = 21;
     int minute = 40;
     int second = 30;
 
-    float UTC = 0;
-    float J2k = 0;
+    float dUT = 0;
+    float JSK = 0;
 
     int xStep = 0;
     int yStep = 0;
@@ -63,17 +81,17 @@
         /////////////////////////////////////////////////////////////////////////////////////////////
 
 // Pic functions
-    void output_b (int foo){
-        //printf("Stp: %x\n", foo);
-    }
-
-    void delay_ms (int foo){
-        sleep (foo/1000);
-    }
-
-    void delay_us (int foo){
-        sleep (foo/1000000);
-    }
+//    void output_b (int foo){
+//        //printf("Stp: %x\n", foo);
+//    }
+//
+//    void delay_ms (int foo){
+//        sleep (foo/1000);
+//    }
+//
+//    void delay_us (int foo){
+//        sleep (foo/1000000);
+//    }
 
 // Stars
     // struct Alkaid {
@@ -127,79 +145,90 @@
     float degfrom(float x);
 
     float J2kfrom( int y, int m, int d, float t);
+    
+    float HourAngle (char lLST, char lRA);
+
+    float LocalSdrTime (float lJSK, float lLNG, int lUT);
+    
     float decimalday(int h, int m, int s);
 
     int inputfloat (char x);
 
-    void DumpPrint ();
+//    void DumpPrint ();
 
 // Step funcs
     void twoStep(float lALT, float LAZ);
 
-int main(){
-    while(1){
+void main(){
+//    while(1){
 
         // Generaging random numbers to test the function we have to set a range to ensure ALT & AZ > pi/2 & 2pi 
-        srand(time(NULL));
-        float a = 1.0;
-        float rALT = (float)rand()/(float)RAND_MAX/1.57079;
-        float rAZ  = (float)rand()/(float)RAND_MAX/6.28318;
+//        srand(time(NULL));
+//        float a = 1.0;
+//        float rALT = (float)rand()/(float)RAND_MAX/1.57079;
+//        float rAZ  = (float)rand()/(float)RAND_MAX/6.28318;
 
         Star Alioth;
 
         Alioth.ra = 12.9004536; 
         Alioth.dec = 55.95984301;
 
-
+        dUT = decimalday(hour,minute,second);
+        JSK = J2kfrom(year,months,day,dUT);
+        
+        LST = LocalSdrTime (JSK,LNG,dUT);
+        HA = HourAngle(LST,RA);
         
         ALT = Altitude(Alioth.dec,LAT,HA);
         AZ = Azimuth(Alioth.dec,ALT,LAT);
 
-        UTC = decimalday(hour,minute,second);
-        J2k = J2kfrom(year,month,day,UTC);
+
 
         twoStep(ALT,AZ);                          // values i know work 1.351567,0.57234 // rALT,rAZ
 
         
         printf("Task completed!\n\n\n\n");
-        sleep(60);
-    }
+        delay_ms(6000);
+//    }
         
 }
 
 ////////////////////////////////////////////     Functions      //////////////////////////////////////////////////////////
 
-// Star stuff     
+//Star Stuff 
     float Altitude (char lDEC, char lLAT, char lHA){
-      float x = sin(lDEC)*sin(lLAT)+cos(lDEC)*cos(lLAT)*cosl(HA);
-      return asin(x);
+        float x = sin(lDEC)*sin(lLAT)+cos(lDEC)*cos(lLAT)*cos(HA);
+        return asin(x);
     }
 
     float Azimuth (char lDEC, char lALT, char lLAT){
-      float x = (sin(lDEC) - sin(lALT)*sin(lLAT))/(cos(lALT)*cos(lLAT));
+        float x = (sin(lDEC) - sin(lALT)*sin(lLAT))/(cos(lALT)*cos(lLAT));
       return acos(x);
     }
 
     float HourAngle (char lLST, char lRA){
-      return lLST - lRA;
+        return lLST - lRA;
     }
 
+    float LocalSdrTime ( float lJSK, float lLNG, int lUT){
+        return 100.46 + 0.985647 * lJSK + lLNG + 15*lUT;
+    }
     //float SidrielTime (char){}
 
     float J2kfrom( int y, int m, int d, float t){
-      float JD = d-32075+1461*(y+4800+(m-14)/12)/4+367*(m-2-(m-14)/12*12)/12-3*((y+4900+(m-14)/12)/100)/4;
-      return JD -2451545.0 + (double)t-0.5;     // julian day for epoh 2000
+        float JD = d-32075+1461*(y+4800+(m-14)/12)/4+367*(m-2-(m-14)/12*12)/12-3*((y+4900+(m-14)/12)/100)/4;
+        return JD -2451545.0 + (double)t-0.5;     // julian day for epoh 2000
     }
 
     float decimalday(int h, int m, int s){
-      return (h+m/(double)60)/(double)24;
+        return (h+m/(double)60)/(double)24;
     }
 
     float degfrom(float x){
-      return x * ((double)180/pi);
+        return x * ((double)180/PI);
     }
     float radfrom(float x){
-      return x * (pi/(double)180);
+        return x * (PI/(double)180);
     }
 
     /*
@@ -208,18 +237,17 @@ int main(){
     }
     */
 
-    void DumpPrint (){
-      printf("RA: %f\n", RA);
-      printf("DEC: %f\n", DEC );
-      printf("LAT: %f\n", LAT);
-      printf("LONG: %f\n", LONG);
-      printf("HA: %f\n", HA);
-      printf("ALT: %f\n", ALT);
-      printf("AZ: %f\n", AZ);
-    }
+    //void DumpPrint (){
+    //  printf("RA: %f\n", RA);
+    //  printf("DEC: %f\n", DEC );
+    //  printf("LAT: %f\n", LAT);
+    //  printf("LNG: %f\n", LNG);
+    //  printf("HA: %f\n", HA);
+    //  printf("ALT: %f\n", ALT);
+    //  printf("AZ: %f\n", AZ);
+    //}
 
-
-//  Two step   
+    //  Two step   
     void twoStep(float lALT, float lAZ){                        // ALT == y    AZ == x  in Rad and what the new cordinates need to be
             // We need to convert the Rad value to step equivilent
         float yStepsTobe = (float)lALT/(float)radStep;          // ALT we have 0 - pi/2 rad at 6144step  360/(5.625/64) = 4096 steps per 2pi; Gear ratio of 10:60 -> (60/4)/10 = 1.5 turns for 2/pi rad 4096*1.5 = 6144 steps for 90 deg or 2/pirad 
@@ -421,3 +449,4 @@ int main(){
     // 
     // 
     // 
+
