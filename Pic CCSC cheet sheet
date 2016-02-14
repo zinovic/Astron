@@ -1,0 +1,14 @@
+
+//  Constraints                                       For the line spacing with printf();
+         \n  Line Feed - Same as \x0a
+         \r   Return Feed - Same as \x0d
+         \t   TAB - Same as \x09
+         \b  Backspace - Same as \x08
+         \f   Form Feed - Same as x0c
+         \a  Bell - Same as \x07
+         \v  Vertical Space - Same as \x0b
+         \?  Question Mark - Same as \x3f
+         \'   Single Quote - Same as \x22
+         \"   Double Quote - Same as \x22
+         \\   A Single Backslash - Same as \x5c
+

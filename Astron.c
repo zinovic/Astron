@@ -57,7 +57,7 @@ void DumpPrint ();
 
 //:-----------~|     MAIN     |~-----------://
 
-int main ()//int argc, char *argv[])
+void main ()//int argc, char *argv[])
 {
   //pi = atan(1)*4;
   
@@ -110,7 +110,7 @@ int main ()//int argc, char *argv[])
 
   printf("Radians to degrees: %f\n", pi);
   */
-  return 1;
+  return;
 }
 
 
