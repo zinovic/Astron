@@ -1,22 +1,22 @@
 # Astron
 
-A green laser aimed at the sky is like a pointing stick for the heavens.
+> A green laser aimed at the sky is like a pointing stick for the heavens.
 										*Paraphrasing- Neil deGrasse Tyson*
 
 So it’s basically a green laser strapped to some stepper motors that is programmed to point at the stars, constellations etc. 
 
-The tools used for this project are:
+**Tools used:**
 
-PIC16F819 				-originally but that has too little ROM 
-PIC 24HJ128GP502 		-now using this with its amazing 128k ROM!
+- PIC16F819 			-originally but that has too little ROM 
+- PIC 24HJ128GP502 		-now using this with its amazing 128k ROM!
 
-MPLab X 				-for the pic development  
-CCSC 					-compiler for the pic
-Pic Kit 2				-write to the pic
-Serial to USB			-for reading serial data form pic and other moduels
+- MPLab X 				-for the pic development  
+- CCSC 					-compiler for the pic
+- Pic Kit 2				-write to the pic
+- Serial to USB			-for reading serial data form pic and other moduels
 
-Sublime text 3			-PC side code writing
-MinG					-PC side compiling, the make file used is included
+- Sublime text 3		-PC side code writing
+- MinG					-PC side compiling, the make file used is included
 
 
 **Desired features:**
