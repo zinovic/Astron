@@ -9,12 +9,10 @@ So it’s basically a green laser strapped to some stepper motors that is progra
 
 - PIC16F819 			-originally but that has too little ROM 
 - PIC 24HJ128GP502 		-now using this with its amazing 128k ROM!
-
 - MPLab X 				-for the pic development  
 - CCSC 					-compiler for the pic
 - Pic Kit 2				-write to the pic
 - Serial to USB			-for reading serial data form pic and other moduels
-
 - Sublime text 3		-PC side code writing
 - MinG					-PC side compiling, the make file used is included
 
@@ -30,13 +28,14 @@ So it’s basically a green laser strapped to some stepper motors that is progra
 
 
 **Currenty on the repo:**
-Astron.c 
+
+- Astron.c 
 Will compile on PC and contains the function reqiered to calculate ALT & AZ for a star with given RA & DEC, location and time data. 
 
-Stepper code.c
+- Stepper code.c
 Will run on PC, this will take radien values for the two motors and output the step sequences that are needed to get there. This has a lot of debuggin printfs all over so they can be used to see how it works. Also on the drive is some of this step data putinto an excel sheet to visually see the deviation form a straight line. There is room to improve the code a lot however time limited. 
 
-GPS_Blink.c
+- GPS_Blink.c
 This is a bit of code taken from what lecturer write to decode GPS tracker, adapted for the pic24. This will run on the pic however a clear signal with th GPS has not yet been achived, maybe its a faulty unit? Interestingly the time does show up correctly. 
 
 
