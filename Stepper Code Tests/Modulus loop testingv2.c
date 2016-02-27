@@ -74,8 +74,6 @@ void loop (int xStepsTobe, int yStepsTobe){
 
 	            hSft = 0;
 	            lSft = 4;
-
-
 	        }
 
 	        else if (abs(xToDo)>abs(yToDo)){                        // This is where AZ is larger AZ is X 
@@ -83,7 +81,7 @@ void loop (int xStepsTobe, int yStepsTobe){
 	            hToDo = abs(xToDo);
 	            lToDo = abs(yToDo);
 
-	            hStepp_tr = &xStep;
+	            hStep_ptr = &xStep;
 	            lStep_ptr = &yStep;
 
 	            hDir = xDir;
@@ -123,7 +121,7 @@ void loop (int xStepsTobe, int yStepsTobe){
 	    //
 
         ///////////////////////// Main Stepper Code Loop ///////////////////////////
-		    /*
+		    
 		        // Lets make an array for the delays
 
 			    //int *arr = (int*)malloc(size*sizeof(int));
@@ -161,44 +159,31 @@ void loop (int xStepsTobe, int yStepsTobe){
 					    	*hStep_ptr+= hDir;
 					    	printf("debug#: %d\n",lStep_ary[1]);
 					    }
-			 			// for (int i = 1; i<10; i++){
-			 				
-			 			// 	if(lStep_ary[i]==0){break;}
-			 			// 	if(hToDo%lStep_ary[i]==0){
-				 		// 		hToDo--;
-					  //   		*hStep_ptr+= hDir;
-					  //   		printf("debug#: %d = %d\n",i,lStep_ary[i]);
-					  //   		break;
-					  //   	}
-			 			
-			 			// }
-
 			 		
 			 		}
 			    	
 			    	printf("lStep,%d,hStep,%d\r\n", *lStep_ptr, *hStep_ptr);
-			    }*/
+			    }
 
-					   //  	    while (hToDo > 0){								// Running the array
-					   //  	hToDo --;
-					   //  	*hStep_ptr+= hDir;
-				 			
-				 			// for (int i = 0; i<11; i++){
-				 			// 	if(lStep_ary[i]==0){break;}
-				 			// 	if(hToDo%lStep_ary[i]==0){
-					 		// 		lToDo--;
-						  //   		*lStep_ptr+= lDir;
-						  //   		printf("debug#: %d = %d\n",i,lStep_ary[i]);
-						  //   		break;
-						  //   	}
-				 			// }
-					    	
-					   //  	printf("lStep,%d,hStep,%d\r\n", *lStep_ptr, *hStep_ptr);
+	   	while (hToDo > 0){								// Running the array
+	    	hToDo --;
+	    	*hStep_ptr+= hDir;
+ 			
+ 			for (int i = 0; i<11; i++){
+ 				if(lStep_ary[i]==0){break;}
+ 				if(hToDo%lStep_ary[i]==0){
+	 				lToDo--;
+		    		*lStep_ptr+= lDir;
+		    		printf("debug#: %d = %d\n",i,lStep_ary[i]);
+		    		break;
+		    	}
+ 			}
+	    	// 
+	    	printf("lStep,%d,hStep,%d\r\n", *lStep_ptr, *hStep_ptr);
+		}
 
-
-					   //  }
-            printf("Vals:    xStep:%d      xLeft%d\r\n", *lStep_ptr, lToDo);
-            printf("Vals:    yStep:%d      yLeft%d\r\n", *hStep_ptr, hToDo);
+  //           printf("Vals:    xStep:%d      xLeft%d\r\n", *lStep_ptr, lToDo);
+  //           printf("Vals:    yStep:%d      yLeft%d\r\n", *hStep_ptr, hToDo);
 
 
 
@@ -251,3 +236,4 @@ int mod = 9999;
             if ( hToDo%lToDo != 0){
                 mod = (int) hToDo/(hToDo%lToDo);
             }
+            */
