@@ -1,334 +1,318 @@
 #include <24HJ128GP502.h>
-//#define PORT_S PIN_B3
-
-#define control 0x7C
-#define command 0xFE
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
 
 #if !defined(__PCD__)
 #error This example will only compile for the PCD 24 bit compiler
 #endif
-
 #fuses HS,NOWDT,noprotect
 //#fuses FRC,FRC_PLL,NOWDT,NOPROTECT,
-#use delay(clock=7350000)                   //7.212Mhz is apparently optimal for 0% error with baud 9600. 
+#use delay(clock=7350000)//This odd value is because 8mzh does not give good RS232 readings at 9600 baud. No idea why
 
-//#use delay(crystal=32mhz)
+#use rs232(baud=9600, RCV=PIN_B10, stream=GPSMODULE, ERRORS)
+#use rs232(baud=9600, XMIT=PIN_B11, RCV=PIN_B10, stream=PC, ERRORS,parity=N,bits=8)
+#use rs232(baud=9600, XMIT=PIN_B6, stream=LCD, ERRORS,parity=N,bits=8)
 
-#use rs232(baud=9600, RCV=PIN_B13, stream=GPSMODULE, ERRORS)
-#use rs232(baud=9600, XMIT=PIN_B14, RCV=PIN_B15, stream=PC, ERRORS,parity=N,bits=8)
-#use rs232(baud=9600, XMIT=PIN_B12, stream=LCD, ERRORS,parity=N,bits=8)
+//Motors
+// Delay for step timing; Ratio for how many radians one step is equal to; The step sequence in hex numbers
+int xStep = 0;
+int yStep = 0;
+int d = 1;
+float radStep = 0.0002556634;
+unsigned int HalfStep[8] = {0x1, 0x3, 0x2, 0x6, 0x4, 0xC, 0x8, 0x9};
+void twoStep(float lALT, float LAZ);
 
+// For converting between radian and degrees 
 //     deg     rad
 //     360     2pi 
 //     180     pi
 //     90      2/pi
 //     0       0
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-//float pi = 3.141592654;
-
-// Stepper stuff
-
 float radfrom(float x);
 float degfrom(float x);
 
-int d = 1;
-float radStep = 0.0002556634;
-unsigned int HalfStep[8] = {0x1, 0x3, 0x2, 0x6, 0x4, 0xC, 0x8, 0x9};
-
-void twoStep(float lALT, float LAZ);
-
-int xStep = 0;
-int yStep = 0;
-
-void SetupLCD();
-
-// Math stuff
-
-float RA = 0; //4.370740779;
+//Star calculation
+// Theory 
+//  Using global variables for the components needed to calculate the star location. 
+//  This is so they can be accessed by any function elsewhere in the code.
+//  These global variables will change based on what star is being pointed to. 
+//  Some of these have values accessed by default this is for testing purposes, they be set is code as is needed
+//  The detailed explanation of how ALT and AZ is calculated for each star will not fit here, visit the link for that:
+//      http://www.stargazing.net/kepler/altaz.html
+float RA = 0; //4.370740779;    
 float DEC = 0; //0.636463406;
-
-float LAT = 52.5; //0.916297857;
-float LNG = -1.9166667; //-0.033452145;
-
+float LAT = 51.5; //0.916297857;
+float LNG = -0.13 ; //-0.033452145;
 float LST = 0;
 float HA = 0; //0.949155775;
-
-float ALT = 0;
-float AZ = 0;
-
+float64 ALT = 0;
+float64 AZ = 0;
 int year = 2016;
 int month = 03;
 int day = 6;
-
 int hour = 23;
 int minute = 10;
 int second = 0;
-
 double deciDay = 0;
 double J2K = 0;
-
 float deciHr = 23.16667;
 
-// Starr functions
-float32 Altitude(float32 lDEC, float32 lLAT, float32 lHA);
-float Azimuth(float lDEC, float lALT, float lLAT);
-
+float64 Altitude(float64 lDEC, float64 lLAT, float64 lHA);
+float64 Azimuth(float64 lDEC, float64 lALT, float64 lLAT);
 float radfrom(float x);
 float degfrom(float x);
-
 float HourAngle(float lLST, float lRA);
-
-float LocalSdrTime(float lday, float lLNG, int lUT);
-
+float LocalSdrTime(float lday, float lLNG, float ldeciHr);
 float64 J2Kfrom(int y, int m, int d, float t);
-
 float decimalDay(int h, int m, int s);
-
 float UTdecimlHours(char h, char m, char s);
+void starPoint(int AU );
+void StellarCalulation ( float starDec, float starRa );
 
-void LingLang ( float starDec, float starRa );
-
-// Star Stuff 
-//char UMiStars[7][10] = {
-//	"Polaris","Yildun","e UMi","z UMi","Kochab","Pherkad","n UMi"
-//};
-
+// Star data types 
+//  Using a struct to store the data for one star. Name; ra,dec for the position at J2000; Distance as piece of interesting data tisplay to the usero d
+//  An array is then initialised with this struc to form constellations. These arrays are populated once at the beginning of the program. 
 typedef struct {
     char name[20];
     float ra;
     float dec;
-    float48 dist;
+    float dist;
 } astroObject;
-
 astroObject UMi[7];
 astroObject UMa[18];
 astroObject Leo[9];
-
 void starSetup();
 
-void LCDrefresh();
+#define control 0x7C
+#define command 0xFE
 
-void main() {
-    output_b(0);
-    fprintf(LCD,"Populating Stars...");
-    starSetup();
-    delay_ms(200);
-    fputc(command, LCD);
-    fputc(0x01, LCD);
-    fprintf(PC,"n\rPopulating Stars...\n\r");
-    
-    //    while(1){
-    //        fputc(command, LCD);
-    //        fputc('r', LCD); 
-    //    }
-    
-    while (1) {
-        for (int i = 0; i < 7; i++) {
-            fprintf(PC,"i incrament: %d\n\r",i);
-            LingLang(UMi[i].dec,UMi[i].ra);
-        }
-        //        LCDrefresh();
-        //        
-        //        fprintf(LCD,"Ursa Minor");
-        //        LCDrefresh();
-        //        for ( int i = 0; i < 7; i++){
-        //            fprintf(LCD,UMi[i].name);
-        ////            LCDrefresh();
-        //            fputc(command, LCD);
-        //            fputc(0xC0, LCD);
-        //            fprintf(LCD,"Dec%f RA%f",UMi[i].dec,UMi[i].ra);
-        //            LCDrefresh();
-        //            
-        //            J2K = J2Kfrom( year, month, day, deciDay);
-        //            LST = LocalSdrTime(J2K,LNG,deciDay);
-        //            HA = HourAngle(LST,UMi[i].ra);
-        //            ALT = Altitude (UMi[i].dec, LAT, HA);
-        //            AZ = Azimuth (UMi[i].dec, ALT, LAT);
-        //            
-        //            fprintf(LCD,"J2K:%f",J2K);
-        //            fputc(command, LCD);
-        //            fputc(0xC0, LCD);            
-        //            fprintf(LCD,"LST:%f",LST);
-        //            delay_ms(5000);
-        //            LCDrefresh();
-        //
-        //            fprintf(LCD,"HA:%f",HA);
-        //            delay_ms(5000);
-        //            LCDrefresh();
-        //            
-        //            fprintf(LCD,"ALT:%f",degfrom(ALT));
-        //            fputc(command, LCD);
-        //            fputc(0xC0, LCD);            
-        //            fprintf(LCD,"AZ:%f",degfrom(AZ));
-        //            delay_ms(5000);
-        //            LCDrefresh();
-        //            
-        //        }
-        //        
-        //        
-        //        fprintf(LCD,"Ursa Majoris");
-        //        LCDrefresh();      
-        //        for ( int y = 0; y < 18; y++){
-        //            fprintf(LCD,UMa[y].name);
-        //            fputc(command, LCD);
-        //            fputc(0xC0, LCD);
-        //            fprintf(LCD,"Dec%f RA%f",UMa[y].dec,UMa[y].ra);
-        //            LCDrefresh();
-        //
-        //        }
-        //        fprintf(LCD,"Leo");
-        //        for ( int e = 0; e < 9; e++){
-        //            fprintf(LCD,Leo[e].name);
-        //            fputc(command, LCD);
-        //            fputc(0xC0, LCD);
-        //            fprintf(LCD,"Dec%f RA%f",Leo[e].dec,Leo[e].ra);
-        //            LCDrefresh();
-        //
-        //        }
+// LCD
+// Basic control function for the LCD. 
+void LCDrefresh(int16 lDelay);
+void LCDnewline();
 
-        //        LCDrefresh();
+// Interrupts 
+//  These proved difficult to get working, currently only the fixed external interrupt on PIN_B7 works;
+//  The pic offers no interrupt interrupt on change as far as was found, there is no INT_RB or equivalent in the header file. 
+//  The pic offers 2 more programmable external interrupt pins however no documentation was found on how to associate the pins to IN_EX1 etc.
+#INT_EXT0       //Set external interrupt on pin RB0 
+void EXT_ISR(void) {
+#USE fast_io(B)             // To set port B to low, In case its paused mid motor cycle to avoide over heating the motors
+    set_tris_b(0x0FF0);
+    output_b(0x0000);
+#USE standard_io(B)
+    LCDrefresh(50);
+    fprintf(LCD, "PAUSED click to continue");
+    delay_ms(500);
 
-
-
-        //        twoStep(0,0);
-        //        twoStep(0,0);
-        //        delay_ms(2000);        
-        //        printf("\n\nALT motor\n\r");
-        //        twoStep(0.2,0);
-        //        delay_ms(500);
-        //        printf("\n\r");
-        //        twoStep(0,0);
-        //        delay_ms(2000);
-        //        
-        //        printf("\n\nAZ motor\n\r");
-        //        twoStep(0,0.2);
-        //        delay_ms(500);
-        //        printf("\n\r");
-        //        twoStep(0,0);
-        //        delay_ms(2000);
-
-        //        printf("\n\nBoth motors\n\r");
-        //        twoStep(0.2,0.2);
-        //        delay_ms(500);
-        //        printf("\n\r");
-        //        twoStep(0,0);
-        //        delay_ms(2000);
-
-        //        printf("\nRandom values \n\r");
-        //        twoStep(0.5,1);
-        //        delay_ms(500);
-        //        printf("\n\r");
-        //        twoStep(1.5,0.1);
-        //        delay_ms(2000);
-
-        //        printf("\n more Random values \n\r");
-        //        twoStep(0.9,0.7);
-        //        delay_ms(500);
-        //        printf("\n\r");
-        //        twoStep(0,1.2);
-        //        delay_ms(2000);
-        //    
-        //        twoStep(0,0);
-        //        delay_ms(2000);
+    disable_interrupts(INT_EXT0);
+    while (!input(PIN_B7)) {
+        //fprintf(LCD,"In while");
+        //just wait for it to be clicked again 
     }
-    return;
+    enable_interrupts( INT_EXT0 );
+    LCDrefresh(50);
 }
 
-//  Stepper motor function
-//      Takes Input as radian, These are the ALT and AZ values
-//      It will convert this input to the steps it needs to do based on its current position
+// RTCC
+//  Sets the internal 
+void timeSet();
+int8 get_number();
+void set_clock(rtc_time_t &date_time);
+void InitTime();
+rtc_time_t tmp;
+rtc_time_t write_clock, read_clock;
+void main() {
+    //#USE fast_io(B)
+    //set_tris_b(0x0FF0);
+    
+    //setup_timer1(TMR_INTERNAL,TMR_DIV_BY_256);
+    //setup_adc_ports(NO_ANALOGS); 
+    //enable_interrupts(INT_RB); 
 
+    //Interrupt enabels  
+    
+// LCD Splash screen settings
+//LCDrefresh(800);
+//fprintf(LCD,"Astron                   rev 0.1");
+//delay_ms(500);
+//fputc(0x7C, LCD);
+//fputc(10, LCD);
+    output_b(0x0000);
+    delay_ms(500);    
+    LCDrefresh(800);
+    // LCD and STAR function setup
+    fprintf(LCD,"populating stars");
+    starSetup();
+    LCDrefresh(600);
+    enable_interrupts( INT_EXT0 );
+    ext_int_edge(L_TO_H);
+    //set_pullup(TRUE, PIN_B7); 
+    enable_interrupts(INTR_GLOBAL);
+    fprintf(LCD,"interrupts");
+    LCDrefresh(600);
+    //RTC setup
+    setup_rtc(RTC_ENABLE,0);         //enables internal RTCC
+    //set_clock(write_clock);
+    rtc_write(&write_clock);           //writes new clock setting to RTCC
+    setup_adc_ports(sAN0);
+    setup_adc(ADC_CLOCK_INTERNAL);
+    set_adc_channel(0);
+    setup_rtc(RTC_ENABLE, 0);
+    InitTime();
+    fprintf(LCD, "clock set");
+    LCDrefresh(600);
+    set_pullup(TRUE,PIN_A0);
+    set_pullup(TRUE,PIN_A1);
+    set_pullup(TRUE,PIN_A2);
+
+    // Alt axis zeroing
+    unsigned int16 ALTzero = 62500;    
+    while (input(PIN_A1)){
+        
+        output_b(HalfStep[ALTzero & 0x7] << 12);
+        delay_ms(1);
+        ALTzero --;
+    }
+    // manual calibration
+    //  Points at Maizar adn wait for button push form user before resetting
+    disable_interrupts(INT_EXT0);
+    LCDrefresh(500);
+    fprintf(LCD," Point Maizar   ");
+    LCDnewline();
+    fprintf(LCD," click confirm ");
+#USE fast_io(B)
+            set_tris_b (0x0FF0);
+            StellarCalulation(UMa[1].dec,UMa[1].ra);
+            twoStep(ALT,AZ);
+#USE standard_io(B)
+    LCDrefresh(500);
+    fprintf(LCD," Point Maizar    ");
+    LCDnewline();
+    fprintf(LCD," click confirm ");
+    while (!input(PIN_B7)) {
+    }
+    enable_interrupts( INT_EXT0 );
+    twoStep(0,0);
+    LCDrefresh(50);
+    
+    // Main while loop    
+    while (1) {                       
+        rtc_read(&tmp); 
+        rtc_read(&read_clock);        
+        LCDrefresh(800);
+        fprintf(LCD,"%02u/%02u/20%02u",read_clock.tm_mon,read_clock.tm_mday,read_clock.tm_year);
+        LCDnewline();
+        fprintf(LCD,"%02u:%02u:%02u",read_clock.tm_hour,read_clock.tm_min,read_clock.tm_sec);
+        
+        year = read_clock.tm_year;
+        month = read_clock.tm_mon;       
+        day = read_clock.tm_mday;
+        hour = read_clock.tm_hour;
+        minute = read_clock.tm_min;
+        second = read_clock.tm_sec;
+        LCDrefresh(4000);
+        // Ursa Majoris
+        for (int e = 0; e < 18; e++) {
+            LCDrefresh(800);
+            fprintf(LCD,"  ");
+            StellarCalulation(UMa[e].dec,UMa[e].ra);
+            fprintf(LCD,UMa[e].name);
+            LCDnewline();
+            fprintf(LCD,"ALT:%2.0f AZ:%2.0f    ",degfrom(ALT),degfrom(AZ));           
+#USE fast_io(B)
+            set_tris_b (0x0FF0);
+            twoStep(ALT,AZ);
+#USE standard_io(B)
+            LCDrefresh(800);
+        }
+        // Ursa Minor 
+        for (int o = 0; o < 7; o++) {
+            LCDrefresh(800);
+            fprintf(LCD,"  ");
+            StellarCalulation(UMi[o].dec,UMi[o].ra);
+            fprintf(LCD,UMi[o].name);
+            LCDnewline();
+            fprintf(LCD,"ALT:%2.0f AZ:%2.0f    ",degfrom(ALT),degfrom(AZ));
+#USE fast_io(B)
+            set_tris_b (0x0FF0);
+            twoStep(ALT,AZ);
+#USE standard_io(B)
+            LCDrefresh(800);
+        }
+        // Leo
+        for (int i = 0; i < 9; i++) {
+            timeSet();
+            LCDrefresh(800);
+            fprintf(LCD,"  ");
+            StellarCalulation(Leo[i].dec,Leo[i].ra);
+            fprintf(LCD,Leo[i].name);
+            LCDnewline();
+            fprintf(LCD,"ALT:%2.0f AZ:%2.0f    ",degfrom(ALT),degfrom(AZ));
+#USE fast_io(B)
+            set_tris_b (0x0FF0);
+            twoStep(ALT,AZ);
+#USE standard_io(B)
+            LCDrefresh(5000);
+        }       
+    }
+}
+
+//:-----------~|  Motor functions   |~-----------://
 void twoStep(float lALT, float lAZ) { // ALT == y    AZ == x  in Rad and what the new cordinates need to be
     // We need to convert the Rad value to step equivilent
-    float yStepsTobe = (float) lALT / (float) radStep; // ALT we have 0 - pi/2 rad at 6144step  360/(5.625/64) = 4096 steps per 2pi; Gear ratio of 10:60 -> (60/4)/10 = 1.5 turns for 2/pi rad 4096*1.5 = 6144 steps for 90 deg or 2/pirad 
-    float xStepsTobe = (float) lAZ / (float) radStep; // AZ  we have 0 - 2pi rad at (ALTsteps*4)       // at this step speed one revolution should take 24576ms or 24.6 seconds this means the longest if shoul take to a point the in the sky is 12.3 seconds
-
+    // ALT we have 0 - pi/2 rad at 6144step  360/(5.625/64) = 4096 steps per 2pi; Gear ratio of 10:60 -> (60/4)/10 = 1.5 turns for 2/pi rad 4096*1.5 = 6144 steps for 90 deg or 2/pi rad 
+    // AZ  we have 0 - 2pi rad at (ALTsteps*4)       
+    // at this step speed one revolution should take 24576ms or 24.6 seconds this means the longest it should take to a point the in the sky is 12.3 seconds
+    float yStepsTobe = (float) lALT / (float) radStep; 
+    float xStepsTobe = (float) lAZ / (float) radStep; 
     // Explenation
     // lAZ/((2*pi)/(6144*4)) = 0.00025566346464760687161968126491532
-    // Lets convert the input radien and the current psition form step values to find the diffrence. 
+    // Lets convert the input radien and the current position form step values to find the diffrence. 
     // max stp num for Alt is: 6144             6144/(pi/2) = 15645.56 So Alt Has 1
     // max stp num for AZ  is: 6144*4 = 24576
     // Now we need to find the step requiered to get there
     int yToDo = yStepsTobe - yStep;
     int xToDo = xStepsTobe - xStep;
-
-    // Report printfs 
-    printf("AZ : %f     xStepsTobe: %f\r\n", lAZ, xStepsTobe);
-    printf("ALT: %f     yStepsTobe: %f\r\n", lALT, yStepsTobe);
-
-    printf("xStep: %d xToDO: %d\r\n", xStep, xToDo);
-    printf("yStep: %d yToDo: %d\r\n", yStep, yToDo);
-
-    //printf("Mis Vals;                         dif:%f yToDo:%d xToDo:%d \n",difs,yToDo,xToDo);    
-
     int yDir = 1;
     if (yToDo < 0) yDir = -1; //Assigning a value to know what direction to move the motors
     int xDir = 1;
     if (xToDo < 0) xDir = -1; //Using the nested if statment. 
-
-
-
     int hToDo;
     int lToDo;
-
     signed int *hStep_ptr;
     signed int *lStep_ptr;
-
     int hDir;
     int lDir;
-
     char hSft;
     char lSft;
 
-    if (yToDo == 0 && xToDo == 0) { // This is to prevent goinginto the loop if no movement happens. To stop in crashing inside the loop. 
-        printf("ERORO: You told me to go noWHERE\r\n");
+    if (yToDo == 0 && xToDo == 0) { // This is to prevent goinginto the loop if no movement happens. To stop a devision by 0 and crashing inside the loop. 
+        fprintf(PC, "ERORO: You told me to go noWHERE\r\n");
         return;
     }
 
     if (abs(yToDo) > abs(xToDo)) { // This is where ALT is larger ALT is Y 
-
         hToDo = abs(yToDo);
         lToDo = abs(xToDo);
-
         hStep_ptr = &yStep;
         lStep_ptr = &xStep;
-
         hDir = yDir;
         lDir = xDir;
-
         hSft = 0;
-        lSft = 4;
-
-        //            if (xToDo == 0){
-        //                lToDo = 1;                                      //This is to ensure we dont ge th stuck in a loop with no end, not the best compromise in terms of accurecy but i has to do 
-        //                // printf("If within the first if %d\n", yToDo);
-        //            } 
-        // printf("Debug first if\n");     
+        lSft = 12;  
     }
     else if (abs(xToDo) > abs(yToDo)) { // This is where AZ is larger AZ is X 
-
         hToDo = abs(xToDo);
         lToDo = abs(yToDo);
-
         hStep_ptr = &xStep;
         lStep_ptr = &yStep;
-
         hDir = xDir;
         lDir = yDir;
-
-
-        hSft = 4;
+        hSft = 12;
         lSft = 0;
-
-        //            if (yToDo == 0){
-        //                lToDo = 1;                                      //Same reasons as above
-        //                // printf("If within the second if %d\n", xToDo);
-        //            } 
-        // printf("Debug second if\n");
     }
     else // intended for the cases where the x and y change values are the same so we run both at once
         while (abs(yToDo) > 0) {
@@ -342,9 +326,7 @@ void twoStep(float lALT, float lAZ) { // ALT == y    AZ == x  in Rad and what th
             yStep += yDir;
             output_b(0x000);
         }
-
     if (xToDo == 0 || yToDo == 0) { // If one motor moves and the other does not, to avoid devision by 0    
-        printf("in the one move fore loop\n\r");
         hDir = xDir;
         lDir = yDir;
         yToDo = abs(yToDo);
@@ -360,223 +342,246 @@ void twoStep(float lALT, float lAZ) { // ALT == y    AZ == x  in Rad and what th
 
     ///////////////////////// Main Stepper Code Loop ///////////////////////////
     while (hToDo > lToDo) {
-        // Debugging prints
-        // printf("hToDo is %d\n", hToDo);
-        // printf("lToDo is %d\n", lToDo);
-        // printf("yDir  %d  xDir: %d\n",yDir,xDir);
-        //
-
         int mod = (int) hToDo / (hToDo % lToDo);
-
-        while (lToDo > 0) {
-            // Debugging prints
-            //printf("while loop hToDo is %d\n", hToDo);
-            //printf("while loop lToDo is %d\n", lToDo);
-            // Print statment for accurecy checks
-            //printf("%d,%d\r\n",lToDo,hToDo );
-            //    
+        while (lToDo > 0) {  
+            // Limit switches code This will happen every 
+//            if (!input(PIN_A0)) {
+//                LCDrefresh(10);
+//                fprintf(LCD, "Negative Limit triggered");
+//                LCDrefresh(900);
+//
+//                if (abs(yToDo) > abs(xToDo)) {
+//                    lToDo = 1;
+//                    output_b(HalfStep[*hStep_ptr & 0x7] << lSft);
+//                    *hStep_ptr += hDir;
+//                    hToDo--;
+//                    delay_ms(d);
+//                }
+//
+//                if (abs(xToDo) > abs(yToDo)) {
+//                    hToDo = 1;
+//                    output_b(HalfStep[*lStep_ptr & 0x7] << hSft);
+//                    *lStep_ptr += lDir;
+//                    lToDo--;
+//                    delay_ms(d);
+//                }
+//                break;
+//            }
+//            if (!input(PIN_A1)) {
+//                LCDrefresh(10);
+//                fprintf(LCD, "Positive Limit triggered");
+//                LCDrefresh(900);
+//
+//                if (abs(yToDo) > abs(xToDo)) {
+//                    lToDo = 1;
+//                    output_b(HalfStep[*hStep_ptr & 0x7] << lSft);
+//                    *hStep_ptr += hDir;
+//                    hToDo--;
+//                    delay_ms(d);
+//                }
+//
+//                if (abs(xToDo) > abs(yToDo)) {
+//                    hToDo = 1;
+//                    output_b(HalfStep[*lStep_ptr & 0x7] << hSft);
+//                    *lStep_ptr += lDir;
+//                    lToDo--;
+//                    delay_ms(d);
+//                }
+//                break;
+//            }
+            
             for (unsigned int i = (unsigned int) ((hToDo / (lToDo)) + 0.5); i > 0; i--) { // Inside the x itteration we have the more frequent y itteration
-                // Debugging prints
-                //                        printf("hTodo is: %d\r\n", hToDo);
-                //                        printf("Fast loop -> ");
-
-
-                //
-                //                    printf("hTodo is: %d\r\n", hToDo);
-                //                    printf("hStep_ptr is: %d\r\n", *hStep_ptr);
-                //                    printf("hDir  is: %d\r\n", hDir);
-                //                    printf("Step# is: %d\r\n", HalfStep[*hStep_ptr&0x7]<<*lSft);
-
                 output_b(HalfStep[*hStep_ptr & 0x7] << lSft);
                 *hStep_ptr += hDir;
                 hToDo--;
                 delay_ms(d);
-                //printf("%ld,%ld \r\n",hToDo,lToDo);
-                if (hToDo % lToDo != 0 && hToDo % (mod /*(int) 300/(hToDo%lToDo)*/) == 0) {
-                    //printf("extra step\n");
+                // This is where the extra steps are added. 
+                if (hToDo % lToDo != 0 && hToDo % (mod) == 0) {
                     i++;
                 }
-
             }
-
-            // Debugging prints
-            //printf("hToDo is %d\r\n", hToDo);
-            //printf("lToDo is %d\r\n", lToDo);
-
-            //printf("Vals;    xStep:%d           yStep%d\r\n", xStep, yStep);
-            //printf("Vals;    xLeft:%d           yLeft%d\r\n", xToDo, yToDo);
-            //printf("Loop ");   
-            //printf("Slow loop -> ");
-            //
             output_b(HalfStep[*lStep_ptr & 0x7] << hSft); //| HalfStep[yStep&0x7]<<lSft);
-
             *lStep_ptr += lDir;
             lToDo--;
-            //*hStep_ptr+=hDir;          
             delay_ms(d);
-            //printf("%ld,%ld \r\n",hToDo,lToDo);
-            // Debugging prints
-            //                    printf("H Step: %d\r\n", *hStep_ptr);
-            //                    printf("L Step: %d\r\n", *lStep_ptr);
-            //
-            //                    printf("lTodo is: %d\r\n", lToDo);
-            //                    printf("lStep_ptr is: %d\r\n", *lStep_ptr);
-            //                    printf("lDir  is: %d\r\n", lDir);
-            //                    printf("Step# is: %d\r\n", HalfStep[*hStep_ptr&0x7]<<*lSft);                
-
         }
-
-        // printf("Done With this loop\n");
-        output_b(0x000);
+        output_b(0x000);    // setting pins to low to avoid over heating the motors and wasting power 
     }
-
-    // after action report
-    printf("\r\nInput:        AZ:%f      ALT:%f\r\n", degfrom(lAZ), degfrom(lALT));
-    //            printf("Output:       AZ:%f      ALT:%f\r\n", degfrom((float)xStep*(double)radStep), degfrom((float)yStep*(double)radStep));
-    //
-    //            printf("diffrence:    AZ:%f      ALT:%f\r\n", degfrom((float)lAZ-(float)xStep*(float)radStep), degfrom((float)lALT-(float)yStep*(float)radStep));
-
-    printf("Vals:    xStep:%d      xLeft%d\r\n", *lStep_ptr, lToDo);
-    printf("Vals:    yStep:%d      yLeft%d\r\n", *hStep_ptr, hToDo);
 }
 
 float degfrom(float x) {
-    return x * ((double) 180 / PI);
+    return x * ((float) 180 / PI);
 }
-
 float radfrom(float x) {
-    return x * (PI / (double) 180);
+    return x * (PI / (float) 180);
 }
-
 
 //:-----------~|  LCD functions   |~-----------://
-
-void SetupLCD() {
-#use  rs232(baud=9600, xmit=PIN_B12, STREAM=LCD) //Define BAUD, transmit pin and Stream ID
-    fputc(control, LCD); //Set to 9600 BAUD
-    fputc('r', LCD); // 
-    fputc(control, LCD); //Set 16 character width 
-    fputc(4, LCD); // 
-    fputc(control, LCD); //Set 2 line LCD 
-    fputc(6, LCD); //
-    fputc(control, LCD); //Set to brightest display 
-    fputc(157, LCD); // 
-    puts("\rDisplay Ready\r\n", LCD); //Print Message 
-    delay_ms(1000); //Wait 5 seconds 
-    fputc(command, LCD); //Clear display 
-    fputc(1, LCD); // 
-    delay_ms(100); // need delay after backlight change
+// LCD Splash screen setting
+//LCDrefresh(800);
+//fprintf(LCD,"Astron                   rev 0.1");
+//delay_ms(500);
+//fputc(0x7C, LCD);
+//fputc(10, LCD);
+void LCDnewline(){
+    fputc(command, LCD);
+    fputc(0xC0, LCD);
 }
-
-void LCDrefresh() {
-    delay_ms(800);
+void LCDrefresh(int16 lDelay) {
+    delay_ms(lDelay);
+    //fprintf(LCD," ");
     fputc(command, LCD);
     fputc(0x01, LCD); //
     delay_ms(50);
 }
 
+//:-----------~|  TIME functions   |~-----------://
+// RTCC real time clock and calender
+//  This pic offers a dedicated module for this function. 
+//  It requires  an external clock 32.768 crystal  
+int8 get_number(){
+  char first,second;
 
+  do {
+    first=getc();
+  } while ((first<'0') || (first>'9'));
+  putc(first);
+  first-='0';
 
+  do {
+    second=getc();
+  } while (((second<'0') || (second>'9')) && (second!='\r'));
+  putc(second);
+
+  if(second=='\r')
+    return(first);
+  else
+    return((first*10)+(second-'0'));
+}
+void set_clock(rtc_time_t &date_time) {
+    printf("\r\nPress ENTER after 1 digit answers.");
+    printf("\r\nYear 20: ");
+    date_time.tm_year = get_number();
+    printf("\r\nMonth: ");
+    date_time.tm_mon = get_number();
+    printf("\r\nDay: ");
+    date_time.tm_mday = get_number();
+    printf("\r\nWeekday 1-7: ");
+    date_time.tm_wday = get_number();
+    printf("\r\nHour: ");
+    date_time.tm_hour = get_number();
+    printf("\r\nMin: ");
+    date_time.tm_min = get_number();
+    date_time.tm_sec = 0;
+    printf("\r\n\n");
+}
+void InitTime() {
+    rtc_time_t tmp;
+    tmp.tm_year = 16;
+    tmp.tm_mday = 18;
+    tmp.tm_mon = 3;
+    tmp.tm_hour = 22;
+    tmp.tm_wday = 5;
+    tmp.tm_sec = 0;
+    tmp.tm_min = 10;
+    rtc_write(&tmp);
+}
+// assign time   
+void timeSet(){
+        rtc_read(&tmp); 
+        rtc_read(&read_clock);        //reads clock value from RTCC
+        year = 2000+read_clock.tm_year;
+        month = read_clock.tm_mon;       
+        day = read_clock.tm_mday;
+        hour = read_clock.tm_hour;
+        minute = read_clock.tm_min;
+        second = read_clock.tm_sec;
+        LCDnewline();        
+        LCDrefresh(800);
+}
 
 //:-----------~|  STAR FUCNTIONS   |~-----------://
-
-void LingLang ( float starDec, float starRa ){
-    //for (int i = 0; i < 7; i++) {
-        //fprintf(PC,"%1.9f\n\r",deciDay);
-        
-        // Time conversions
-        deciDay = decimalDay(hour, minute, second);
-        deciHr = UTdecimlHours(hour, minute, second);
-        J2K = J2Kfrom(year, month, day, deciDay);
-        
-        // Time relative to location
-        LST = LocalSdrTime(J2K, LNG, deciHr);
-        HA = HourAngle(LST, starRa);
-        
-        fprintf(PC, "LST:%5.5f\n\rHA :%9.5f\n\r",LST, HA);
-        fprintf(PC, "deciHr:%5.5f\n\rdeciDay:%9.5f\n\r",deciHr, deciDay);
-        fprintf(PC, "LST:%5.5f\n\rHA:%9.5f\n\r",LST, HA);
-        fprintf(PC, "ALT:%5.5f\n\rAZ:%9.5f\n\r", ALT, AZ);
-
-        // Coordinates calculations 
-        ALT = Altitude(starDec, LAT, HA);
-        AZ = Azimuth(starDec, ALT, LAT);
-
-        fprintf(PC, "J2K:%1.9f\n\r", J2K);
-        fprintf(PC, "DEC:%9.5f\r\nRA:%9.5f\n\r", UMi[0].dec, starRa);
-        fprintf(PC, "ALT:%5.5f\n\rAZ:%9.5f\n\r", ALT, AZ);
-        ALT = 0;
-        AZ = 0;
-        delay_ms(3000);
-    //}
-
+void starPoint(int * AU ){
+// This is intended to be a function that takes a pointer to a constellation array as its input at cycles through the stars in it
 }
-
-float32 Altitude(float32 lDEC, float32 lLAT, float32 lHA) {
-    float32 x = (float32)sin(lDEC) * sin(lLAT) + cos(DEC) * (float32)cos(lLAT) * cos(lHA);
-    return (float32) asin(x);
+void StellarCalulation ( float starDec, float starRa ){
+    starDec = radfrom(starDec);
+    starRa = radfrom(starRa);
+    // Time conversions   
+    deciDay = decimalDay(hour, minute, second);
+    deciHr = UTdecimlHours(hour, minute, second);
+    J2K = J2Kfrom(year, month, day, deciDay);
+    // Time relative to location
+    LST = LocalSdrTime(J2K, LNG, deciHr);
+    HA = HourAngle(LST, degfrom(starRa));
+    // Coordinates calculations 
+    float64 radLAT = radfrom(LAT);
+    float64 radHA = radfrom(HA);
+    ALT = Altitude(starDec, radLAT, radHA);
+    AZ = Azimuth(starDec, ALT, radLAT);
 }
-
-float Azimuth(float lDEC, float lALT, float lLAT) {
-    float x = (float)(sin(lDEC) - sin(lALT) * sin(lLAT)) / ((float)cos(lALT) * cos(lLAT));
-    return (float) acos(x);
+float64 Altitude(float64 lDEC, float64 lLAT, float64 lHA) {
+    float64 x = (float64)(sin(lDEC)*sin(lLAT))+(float64)(cos(lDEC)*cos(lLAT)* cos(lHA));
+    return (float64) asin(x);
 }
-
-float HourAngle(float lLST, float lRA) {
-    return ((float) lLST - lRA);
+float64 Azimuth(float64 lDEC, float64 lALT, float64 lLAT) {
+    float64 x = (sin(lDEC) - sin(lALT) * sin(lLAT)) / (cos(lALT) * cos(lLAT));
+    return (float64) acos(x);
 }
-
-float LocalSdrTime(float lJ2K, float lLNG, int ldeciHr) {
-    float  lLST = 100.46 + 0.985647 * (float)lJ2K + lLNG + 15 * (float)ldeciHr;
-    char dirLST = 1;
-    
-    while (lLST < 0){
+float HourAngle(float lLST, float lRA) {    
+    float lHA = (lLST - lRA);
+    //This is to keep the values between 0 and 360 
+    while (lHA < 0) {       
         lLST += 360;
     }
-    while (lLST >= 360){
+    while (lHA > 360) {
         lLST -= 360;
     }
-      
-    return lLST; 
-    
-    //lLST -= 360;return 100.46 + 0.985647 * (float)lJ2K + lLNG + 15 * (float)ldeciHr;
+    return lHA;
 }
-
+float LocalSdrTime(float lJ2K, float lLNG, float ldeciHr) {
+    lLNG = (float) radfrom(lLNG);
+    float lLST = 100.46 + (float) 0.985647 * (float) lJ2K + lLNG + 15 * (float) ldeciHr;
+    while (lLST < 0 || lLST > 360 ){
+        //This is to keep the values between 0 and 360
+        while (lLST < 0) {
+            lLST += 360;
+        }
+        while (lLST > 360){
+            lLST -= 360;
+        }
+    }  
+    return lLST; 
+}
 float UTdecimlHours(char h, char m, char s){
     return (h + (float)(m+(s/60))/60);
 }
-
-// J2K is the Julian time since 12:00 1 jan 2000 of the (cregorian calender) referred to Epoh 2000.
+// J2K is the Julian time since 12:00 1 jan 2000 of the (gregorian calender) referred to Epoh 2000.
 //      The stellar data is adjusted for Epoh 2000; J2000 == J 2451545.0
 //      The J date conversion formula is from UNSO: http://aa.usno.navy.mil/faq/docs/JD_Formula.php
 //      The values form this equation need to be adjusted for J2000.
-//      The decimal day is also added to the result to give a J200 time.
+//      The decimal day is also added to the result to give a complete J2000 time.
 // Checking J2K
 //      J2K*60*60*24 == Julian seconds
 //      ((Julian seconds/60)/60)/24  == J2K
 //      Use this for checking : https://nsidc.org/data/icesat/glas-date-conversion-tool/date_convert/ 
 // Example 
-//      Input:  2016 03 06    18:47:00                   >>   5909.282638847    
-//      Check: 5909.282638847*60*60*24 = 510562019.996   >>   2016-03-06    18:46:59.995    
-
+//      Input:  2016 03 06    18:47:00 >>  this function >>   5909.282638847    
+//      Check: 5909.282638847*60*60*24 = 510562019.996   >>   2016-03-06    18:46:59.995
 float64 J2Kfrom(int y, int m, int d, float t) {
     unsigned int64 JD = d - 32075 + 1461 * (double) (y + 4800 + (m - 14) / 12) / 4 + 367 * (m - 2 - (m - 14) / 12 * 12) / 12 - 3 * ((y + 4900 + (m - 14) / 12) / 100) / 4;
-    fprintf(PC, "JD:%1.9Lu\n\r", JD);
     return (JD - (float64) 2451545.0 + t - 0.5);
 }
-
 float decimalDay(int h, int m, int s) {
-    return (h + (float)(m+(s/60))/60)/24;
+    return (h + (float) (m + (s / 60)) / 60) / 24;
 }
-
 void starSetup() {
-
     // Ursa Minor
     // Polaris
     strcpy(UMi[0].name, "Polaris");
-    UMi[0].ra = 2.52974312;
+    UMi[0].ra = 2.52974312;     // adjusted for J2000 in degrees 
     UMi[0].dec = 89.26413805;
-    UMi[0].dist = 132.2751323;
+    UMi[0].dist = 132.2751323;  // in light years
     //
 
     // Yildun
